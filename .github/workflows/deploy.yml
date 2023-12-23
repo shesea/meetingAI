@@ -30,7 +30,7 @@ jobs:
         IMAGE_NAME: backend
 
     - name: deploy-docker-backend
-      run: sh ./scripts/deploy.sh
+      run: ls && sh ./scripts/deploy.sh
       env:
         OAUTH: ${{ secrets.OAUTH }}
         REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
