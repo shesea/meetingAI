@@ -22,20 +22,17 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
       
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: get-image-version
-        run: sh ./scripts/get-version.sh
-        env:
-          OAUTH: ${{ secrets.OAUTH }}
-          REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
-          IMAGE_NAME: backend
+    - uses: actions/checkout@v3
+    - name: get-image-version
+      run: sh ./scripts/get-version.sh
+      env:
+        OAUTH: ${{ secrets.OAUTH }}
+        REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
+        IMAGE_NAME: backend
 
-      - name: deploy-docker-backend
-        run: sh ./scripts/deploy.sh
-        env:
-          OAUTH: ${{ secrets.OAUTH }}
-          REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
-          VERSION_NUMBER: ${{ env.NEW_VERSION }}
+    - name: deploy-docker-backend
+      run: sh ./scripts/deploy.sh
+      env:
+        OAUTH: ${{ secrets.OAUTH }}
+        REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
+        VERSION_NUMBER: ${{ env.NEW_VERSION }}
