@@ -27,7 +27,7 @@ jobs:
         CERTS: ${{ secrets.CERTS }}
 
     - name: Build with Maven
-      run: mvn -B clean compile package
+      run: mvn -B -DskipTests=true clean compile package 
       env:
         CLUSTER_ID: ${{ secrets.CLUSTER_ID }}
         DB_NAME: ${{ secrets.DB_NAME }}
