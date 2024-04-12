@@ -1,6 +1,7 @@
 package spbu.meetingAI.entity;
 
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.*;
 import spbu.meetingAI.util.MeetingJsonConverter;
@@ -9,8 +10,7 @@ import spbu.meetingAI.util.MeetingJsonConverter;
 @Table(name = "meeting")
 public class Meeting {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private long id;
+    private UUID id = UUID.randomUUID();
 
     @Column(name = "title")
     private String title;
@@ -22,17 +22,17 @@ public class Meeting {
     public Meeting() {
     }
 
-    public Meeting(long id, String title, List<String> keyWords) {
+    public Meeting(UUID id, String title, List<String> keyWords) {
         this.id = id;
         this.title = title;
         this.keyWords = keyWords;
     }
 
-    public long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 

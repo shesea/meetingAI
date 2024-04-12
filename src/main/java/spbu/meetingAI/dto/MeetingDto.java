@@ -1,11 +1,12 @@
 package spbu.meetingAI.dto;
 
 import java.util.List;
+import java.util.UUID;
 
 import spbu.meetingAI.entity.Meeting;
 
 public class MeetingDto {
-    public long id;
+    public UUID id;
 
     public String title;
 

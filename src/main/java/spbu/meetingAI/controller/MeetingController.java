@@ -1,12 +1,13 @@
 package spbu.meetingAI.controller;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.service.MeetingService;
 
@@ -22,9 +23,20 @@ public class MeetingController {
 
     @GetMapping("/{meetingId}")
     public CompletableFuture<MeetingDto> getMeetingById(
-            @PathVariable("meetingId") long meetingId
+            @PathVariable("meetingId") UUID meetingId
     ) {
         return service.getMeeting(meetingId)
                 .thenApply(MeetingDto::convertFromModel);
+    }
+
+    @PostMapping("/upload/{meetingId}")
+    public void handleFileUploadUsingCurl(
+            @RequestParam("file") MultipartFile file) throws IOException, InterruptedException, URISyntaxException {
+
+        System.out.println("Got file " + file.getSize());
+        System.out.println("Content type is " + file.getContentType());
+
+        service.uploadRecording(file);
+
     }
 }

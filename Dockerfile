@@ -1,11 +1,13 @@
 FROM eclipse-temurin:17-jdk-focal
 WORKDIR /
 
+ARG api_key
 ARG cluster_id
 ARG db_name
 ARG db_username
 ARG db_password
 
+ENV API_KEY=${api_key}
 ENV CLUSTER_ID=${cluster_id}
 ENV DB_NAME=${db_name}
 ENV DB_USERNAME=${db_username}
