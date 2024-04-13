@@ -21,6 +21,8 @@ RUN apt-get update && \
     chmod 0600 ~/.postgresql/root.crt
 COPY ssl/certs.pem ssl/certs.pem
 COPY ssl/private_key.pem ssl/private_key.pem
+RUN mkdir /root/.aws
+COPY .aws/credentials /root/.aws/credentials
 COPY target/meetingAI-0.0.1-SNAPSHOT.jar app.jar
 ENTRYPOINT ["java","-jar","app.jar"]
 EXPOSE 8002

@@ -113,6 +113,8 @@ public class MeetingService {
         var operationId = "";
 
         var response = client.send(request, HttpResponse.BodyHandlers.ofLines());
+        System.out.println(response.statusCode());
+        System.out.println(response.body());
         var body = response.body();
         //TODO add status code handling
         var idString = body.filter(s -> s.contains("id")).findFirst();
