@@ -1,6 +1,6 @@
 package spbu.meetingAI.service;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -16,6 +16,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.util.IOUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONObject;
@@ -24,6 +25,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.repository.MeetingRepository;
+
+import javax.sound.sampled.AudioFileFormat;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
 
 @Service
 public class MeetingService {
@@ -84,10 +90,22 @@ public class MeetingService {
                 )
                 .build();
 
+        File wavFile = new File("recordings.wav");
+        InputStream pcmInputStream = file.getInputStream();
+        FileOutputStream wavOutputStream = new FileOutputStream(wavFile);
+        var byteArray = IOUtils.toByteArray(pcmInputStream);
+        AudioSystem.write(new AudioInputStream(new ByteArrayInputStream(byteArray),
+                        new AudioFormat(48000,16,1,true,
+                                true),byteArray.length),
+                AudioFileFormat.Type.WAVE,wavOutputStream);
+        wavOutputStream.flush();
+        wavOutputStream.close();
+        pcmInputStream.close();
+
         String key = meeting.getId() + EXTENSION;
         ObjectMetadata metadata = new ObjectMetadata();
         metadata.setContentLength(file.getSize());
-        s3.putObject(new PutObjectRequest(BUCKET_NAME, key, file.getInputStream(), metadata));
+        s3.putObject(new PutObjectRequest(BUCKET_NAME, key, wavFile));
     }
 
     private String sendToRecognition(Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
