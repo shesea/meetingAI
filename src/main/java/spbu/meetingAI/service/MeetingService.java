@@ -16,7 +16,6 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.util.IOUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONObject;
@@ -26,15 +25,10 @@ import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.repository.MeetingRepository;
 
-import javax.sound.sampled.AudioFileFormat;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-
 @Service
 public class MeetingService {
     final private String BUCKET_NAME = "mediafiles";
-    final private String EXTENSION = ".wav";
+    final private String EXTENSION = ".pcm";
     final private String S3_ENDPOINT = "storage.yandexcloud.net";
     final private String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
     final private String RECOGNITION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
@@ -90,22 +84,11 @@ public class MeetingService {
                 )
                 .build();
 
-        File wavFile = new File("recordings.wav");
-        InputStream pcmInputStream = file.getInputStream();
-        FileOutputStream wavOutputStream = new FileOutputStream(wavFile);
-        var byteArray = IOUtils.toByteArray(pcmInputStream);
-        AudioSystem.write(new AudioInputStream(new ByteArrayInputStream(byteArray),
-                        new AudioFormat(48000,16,1,true,
-                                true),byteArray.length),
-                AudioFileFormat.Type.WAVE,wavOutputStream);
-        wavOutputStream.flush();
-        wavOutputStream.close();
-        pcmInputStream.close();
-
         String key = meeting.getId() + EXTENSION;
         ObjectMetadata metadata = new ObjectMetadata();
         metadata.setContentLength(file.getSize());
-        s3.putObject(new PutObjectRequest(BUCKET_NAME, key, wavFile));
+
+        s3.putObject(new PutObjectRequest(BUCKET_NAME, key, new ByteArrayInputStream(file.getBytes()), metadata));
     }
 
     private String sendToRecognition(Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
@@ -115,6 +98,7 @@ public class MeetingService {
                                 .put("languageCode", "ru-RU")
                                 .put("model", "general:rc")
                                 .put("audioEncoding", "LINEAR16_PCM")
+                                .put("sampleRateHertz", 16000)
                                 .put("audioChannelCount", 2)
                                 .put("literature_text", true)))
                 .put("audio", new JSONObject()
@@ -132,11 +116,9 @@ public class MeetingService {
 
         var response = client.send(request, HttpResponse.BodyHandlers.ofLines());
         System.out.println(response.statusCode());
-        System.out.println(response.body());
         var body = response.body();
         //TODO add status code handling
         var idString = body.filter(s -> s.contains("id")).findFirst();
-        System.out.println(idString);
         if (idString.isPresent()) {
             var temp = idString.get();
             operationId = temp.substring(8, temp.length() - 2);
@@ -168,6 +150,10 @@ public class MeetingService {
             return "";
         }
         for (JsonNode chunk: chunks) {
+            var channel = chunk.get("channelTag").asInt();
+            if (channel != 1) {
+                continue;
+            }
             var alternatives = chunk.get("alternatives");
             if (alternatives.size() != 1) {
                 System.out.println(alternatives.textValue());
