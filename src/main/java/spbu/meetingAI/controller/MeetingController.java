@@ -29,7 +29,7 @@ public class MeetingController {
                 .thenApply(MeetingDto::convertFromModel);
     }
 
-    @PostMapping("/upload/{meetingId}")
+    @PostMapping("/upload")
     public void handleFileUploadUsingCurl(
             @RequestParam("file") MultipartFile file) throws IOException, InterruptedException, URISyntaxException {
 

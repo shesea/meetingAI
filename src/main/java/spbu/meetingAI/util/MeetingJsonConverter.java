@@ -18,6 +18,9 @@ public class MeetingJsonConverter implements AttributeConverter<List<String>, St
     public String convertToDatabaseColumn(List<String> list) {
         try {
             ArrayNode root = mapper.createArrayNode();
+            if (list == null) {
+                return mapper.writeValueAsString(root);
+            }
             for (String value : list) {
                 root.add(value);
             }
@@ -30,6 +33,9 @@ public class MeetingJsonConverter implements AttributeConverter<List<String>, St
     @Override
     public List<String> convertToEntityAttribute(String json) {
         try {
+            if (json.equals("[]")) {
+                return null;
+            }
             JsonNode root = mapper.readTree(json);
             List<String> list = new ArrayList<>(root.size());
             for (JsonNode element : root) {

@@ -1,13 +1,18 @@
 package spbu.meetingAI.entity;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import spbu.meetingAI.util.MeetingJsonConverter;
 
 @Entity
-@Table(name = "meeting")
+@Table(name = "meetings")
 public class Meeting {
     @Id
     private UUID id = UUID.randomUUID();
@@ -15,17 +20,44 @@ public class Meeting {
     @Column(name = "title")
     private String title;
 
+    @CreationTimestamp
+    @Column(name = "createdAt")
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updatedAt")
+    private LocalDateTime updatedAt;
+
+    @Column(name = "startTime")
+    private LocalDateTime startTime;
+
+    @Column(name = "duration")
+    private Duration duration;
+
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "transcript", columnDefinition = "varchar")
+    private String transcript;
+
+    @Column(name = "summary", columnDefinition = "varchar")
+    private String summary;
+
+    @Column(name = "particiipants", columnDefinition = "json")
+    @Convert(converter = MeetingJsonConverter.class)
+    @ColumnTransformer(write = "?::jsonb")
+    private List<String> participants;
+
     @Column(name = "keyWords", columnDefinition = "json")
     @Convert(converter = MeetingJsonConverter.class)
+    @ColumnTransformer(write = "?::jsonb")
     private List<String> keyWords;
 
-    public Meeting() {
-    }
+    @ManyToOne
+    @JoinColumn(name = "createdBy")
+    private User createdBy;
 
-    public Meeting(UUID id, String title, List<String> keyWords) {
-        this.id = id;
-        this.title = title;
-        this.keyWords = keyWords;
+    public Meeting() {
     }
 
     public UUID getId() {
@@ -50,5 +82,77 @@ public class Meeting {
 
     public void setKeyWords(List<String> keyWords) {
         this.keyWords = keyWords;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
+    public Duration getDuration() {
+        return duration;
+    }
+
+    public void setDuration(Duration duration) {
+        this.duration = duration;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getTranscript() {
+        return transcript;
+    }
+
+    public void setTranscript(String transcript) {
+        this.transcript = transcript;
+    }
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
+    }
+
+    public List<String> getParticipants() {
+        return participants;
+    }
+
+    public void setParticipants(List<String> participants) {
+        this.participants = participants;
+    }
+
+    public User getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(User createdBy) {
+        this.createdBy = createdBy;
     }
 }

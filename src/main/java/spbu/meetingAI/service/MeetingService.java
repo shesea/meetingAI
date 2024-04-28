@@ -5,6 +5,7 @@ import java.net.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -51,6 +52,7 @@ public class MeetingService {
     public Meeting createMeeting(MultipartFile file) {
         Meeting meeting = new Meeting();
         meeting.setTitle(file.getName());
+        meeting.setCreatedAt(LocalDateTime.now());
         return meeting;
     }
 
@@ -60,7 +62,9 @@ public class MeetingService {
         uploadToS3(file, meeting);
         Thread.sleep(10000);
         String operationId = sendToRecognition(meeting);
-        String transcription = getTranscription(operationId);
+        String transcript = getTranscript(operationId);
+        meeting.setTranscript(transcript);
+        meetingRepository.save(meeting);
     }
 
     private void uploadToS3(MultipartFile file, Meeting meeting) throws IOException {
@@ -127,7 +131,7 @@ public class MeetingService {
         return operationId;
     }
 
-    public String getTranscription(String operationId) throws URISyntaxException, InterruptedException, IOException {
+    public String getTranscript(String operationId) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
                 .uri(new URI(RECOGNITION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
