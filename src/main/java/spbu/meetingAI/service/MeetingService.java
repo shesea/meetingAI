@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -19,6 +20,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -32,7 +34,9 @@ public class MeetingService {
     final private String EXTENSION = ".pcm";
     final private String S3_ENDPOINT = "storage.yandexcloud.net";
     final private String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
-    final private String RECOGNITION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
+    final private String OPERATION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
+    final private String COMPLETION_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync";
+    final private String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
     final private String SIGNING_REGION = "ru-central1";
 
     final HttpClient client = HttpClient.newHttpClient();
@@ -63,7 +67,9 @@ public class MeetingService {
         Thread.sleep(10000);
         String operationId = sendToRecognition(meeting);
         String transcript = getTranscript(operationId);
+        String summary = getSummary(transcript);
         meeting.setTranscript(transcript);
+        meeting.setSummary(summary);
         meetingRepository.save(meeting);
     }
 
@@ -133,7 +139,7 @@ public class MeetingService {
 
     public String getTranscript(String operationId) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
-                .uri(new URI(RECOGNITION_RESULT_ENDPOINT + operationId))
+                .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
                 .version(HttpClient.Version.HTTP_1_1)
                 .build();
@@ -168,5 +174,69 @@ public class MeetingService {
         }
         System.out.println(transcript);
         return transcript.toString();
+    }
+
+    public String getSummary(String transcript) throws URISyntaxException, IOException, InterruptedException {
+        String command = "Напиши краткое содержание текста от первого лица";
+        String json = new JSONObject()
+                .put("modelUri", LANGUAGE_MODEL_URI)
+                .put("completionOptions", new JSONObject()
+                        .put("stream", true)
+                        .put("temperature", 0)
+                        .put("maxTokens", 2000))
+                .put("messages", new JSONArray()
+                        .put(new JSONObject()
+                                .put("role", "system")
+                                .put("text", command))
+                        .put(new JSONObject()
+                                .put("role", "user")
+                                .put("text", transcript)))
+                .toString();
+
+        var request = HttpRequest.newBuilder()
+                .uri(new URI(COMPLETION_ENDPOINT))
+                .headers("Authorization", "Api-Key " + System.getenv("API_KEY"), "Content-Type", "application/json")
+                .version(HttpClient.Version.HTTP_1_1)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        var operationId = "";
+
+        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(response.statusCode());
+        var body = response.body();
+        //TODO add status code handling
+        var idString = Arrays.stream(body.split(",")).filter(s -> s.contains("id")).findFirst();
+        if (idString.isPresent()) {
+            var temp = idString.get();
+            operationId = temp.substring(7, temp.length() - 1);
+            System.out.println(operationId);
+        }
+
+        if (operationId.isEmpty()) {
+            return "";
+        }
+
+        request = HttpRequest.newBuilder()
+                .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
+                .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+
+        boolean found = false;
+        var str = "";
+        while (!found) {
+            Thread.sleep(10000);
+            str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            found = str.contains("\"done\": true,");
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        JsonNode root = mapper.readTree(str);
+        String summary = root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
+
+        System.out.println(summary);
+        return summary;
     }
 }
