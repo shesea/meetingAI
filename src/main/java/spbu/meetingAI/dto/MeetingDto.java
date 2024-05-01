@@ -8,6 +8,8 @@ import java.util.UUID;
 import spbu.meetingAI.entity.Meeting;
 
 public class MeetingDto {
+    public boolean done;
+
     public UUID id;
 
     public String title;
@@ -26,9 +28,13 @@ public class MeetingDto {
 
     public String summary;
 
+    public String customSummary;
+
     public List<String> participants;
 
     public List<String> keyWords;
+
+    public List<String> quotes;
 
     public UUID userId;
 
@@ -43,13 +49,16 @@ public class MeetingDto {
         dto.description = meeting.getDescription();
         dto.transcript = meeting.getTranscript();
         dto.summary = meeting.getSummary();
+        dto.customSummary = meeting.getCustomSummary();
         dto.participants = meeting.getParticipants();
         dto.keyWords = meeting.getKeyWords();
+        dto.quotes = meeting.getQuotes();
         if (meeting.getCreatedBy() == null) {
             dto.userId = null;
         } else {
             dto.userId = meeting.getCreatedBy().getId();
         }
+        dto.done = dto.summary != null && dto.keyWords != null && dto.quotes != null && dto.description != null && dto.title != null;
         return dto;
     }
 }

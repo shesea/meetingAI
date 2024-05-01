@@ -43,7 +43,10 @@ public class Meeting {
     @Column(name = "summary", columnDefinition = "varchar")
     private String summary;
 
-    @Column(name = "particiipants", columnDefinition = "json")
+    @Column(name = "customSummary", columnDefinition = "varchar")
+    private String customSummary;
+
+    @Column(name = "participants", columnDefinition = "json")
     @Convert(converter = MeetingJsonConverter.class)
     @ColumnTransformer(write = "?::jsonb")
     private List<String> participants;
@@ -52,6 +55,11 @@ public class Meeting {
     @Convert(converter = MeetingJsonConverter.class)
     @ColumnTransformer(write = "?::jsonb")
     private List<String> keyWords;
+
+    @Column(name = "quotes", columnDefinition = "json")
+    @Convert(converter = MeetingJsonConverter.class)
+    @ColumnTransformer(write = "?::jsonb")
+    private List<String> quotes;
 
     @ManyToOne
     @JoinColumn(name = "createdBy")
@@ -140,6 +148,14 @@ public class Meeting {
         this.summary = summary;
     }
 
+    public String getCustomSummary() {
+        return customSummary;
+    }
+
+    public void setCustomSummary(String customSummary) {
+        this.customSummary = customSummary;
+    }
+
     public List<String> getParticipants() {
         return participants;
     }
@@ -154,5 +170,13 @@ public class Meeting {
 
     public void setCreatedBy(User createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public List<String> getQuotes() {
+        return quotes;
+    }
+
+    public void setQuotes(List<String> quotes) {
+        this.quotes = quotes;
     }
 }
