@@ -7,6 +7,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -39,7 +40,9 @@ public class MeetingService {
     final private String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
     final private String SIGNING_REGION = "ru-central1";
 
-    final HttpClient client = HttpClient.newHttpClient();
+    final static HttpClient client = HttpClient.newHttpClient();
+    final static ObjectMapper mapper = new ObjectMapper();
+
 
     MeetingRepository meetingRepository;
 
@@ -67,9 +70,17 @@ public class MeetingService {
         Thread.sleep(10000);
         String operationId = sendToRecognition(meeting);
         String transcript = getTranscript(operationId);
-        String summary = getSummary(transcript);
+        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
+        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста, напиши их обязательно в одну строку", transcript).toLowerCase();
+        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
+        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
+        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат, не используй никаких кавычек в цитатах. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
         meeting.setTranscript(transcript);
         meeting.setSummary(summary);
+        meeting.setKeyWords(List.of(keyWords.substring(0, keyWords.length() - 1).split(", ")));
+        meeting.setDescription(description);
+        meeting.setTitle(title);
+        meeting.setQuotes(Arrays.stream(quotes.split("\n\n")).map(s -> s.substring(3)).toList());
         meetingRepository.save(meeting);
     }
 
@@ -176,8 +187,26 @@ public class MeetingService {
         return transcript.toString();
     }
 
-    public String getSummary(String transcript) throws URISyntaxException, IOException, InterruptedException {
-        String command = "Напиши краткое содержание текста от первого лица";
+    public String getGeneratedValue(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
+        var response = sendGptRequest(command, transcript);
+        System.out.println(response.statusCode());
+        var body = response.body();
+        //TODO add status code handling
+        var operationId = getOperationId(body);
+
+        if (operationId.isEmpty()) {
+            return "";
+        }
+
+        var responseMessage = getCompleteOperation(operationId);
+        JsonNode root = mapper.readTree(responseMessage);
+        String summary = root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
+
+        System.out.println(summary);
+        return summary;
+    }
+
+    private HttpResponse<String> sendGptRequest(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
         String json = new JSONObject()
                 .put("modelUri", LANGUAGE_MODEL_URI)
                 .put("completionOptions", new JSONObject()
@@ -200,24 +229,23 @@ public class MeetingService {
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
 
-        var operationId = "";
 
-        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        System.out.println(response.statusCode());
-        var body = response.body();
-        //TODO add status code handling
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public String getOperationId(String body) {
+        var operationId = "";
         var idString = Arrays.stream(body.split(",")).filter(s -> s.contains("id")).findFirst();
         if (idString.isPresent()) {
             var temp = idString.get();
             operationId = temp.substring(7, temp.length() - 1);
             System.out.println(operationId);
         }
+        return operationId;
+    }
 
-        if (operationId.isEmpty()) {
-            return "";
-        }
-
-        request = HttpRequest.newBuilder()
+    public String getCompleteOperation(String operationId) throws URISyntaxException, InterruptedException, IOException {
+        var request = HttpRequest.newBuilder()
                 .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
                 .version(HttpClient.Version.HTTP_1_1)
@@ -230,13 +258,6 @@ public class MeetingService {
             str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             found = str.contains("\"done\": true,");
         }
-
-        ObjectMapper mapper = new ObjectMapper();
-
-        JsonNode root = mapper.readTree(str);
-        String summary = root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
-
-        System.out.println(summary);
-        return summary;
+        return str;
     }
 }

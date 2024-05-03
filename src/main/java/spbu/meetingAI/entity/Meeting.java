@@ -34,7 +34,7 @@ public class Meeting {
     @Column(name = "duration")
     private Duration duration;
 
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "varchar")
     private String description;
 
     @Column(name = "transcript", columnDefinition = "varchar")
