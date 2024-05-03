@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.repository.MeetingRepository;
 
@@ -55,6 +56,17 @@ public class MeetingService {
         return CompletableFuture.completedFuture(meetingRepository.findById(id).orElseThrow());
                 //TODO add handle
     }
+
+    public CompletableFuture<Meeting> updateMeeting(MeetingDto dto) {
+        Meeting meeting = meetingRepository.findById(UUID.fromString(dto.id)).orElse(null);
+        if (meeting == null) {
+            throw new RuntimeException("Meeting not found with id: " + UUID.fromString(dto.id));
+        }
+
+        meeting.setCustomSummary(dto.customSummary);
+        return CompletableFuture.completedFuture(meetingRepository.save(meeting));
+    }
+
 
     public Meeting createMeeting(MultipartFile file) {
         Meeting meeting = new Meeting();

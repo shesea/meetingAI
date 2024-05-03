@@ -26,7 +26,7 @@ public class MeetingController {
             @PathVariable("meetingId") UUID meetingId
     ) {
         return service.getMeeting(meetingId)
-                .thenApply(MeetingDto::convertFromModel);
+                .thenApply(MeetingDto::fromModel);
     }
 
     @PostMapping("/upload")
@@ -38,5 +38,12 @@ public class MeetingController {
 
         service.uploadRecording(file);
 
+    }
+
+    @PutMapping("/{meetingId}")
+    public CompletableFuture<MeetingDto> updateMeetingById(
+            @RequestBody MeetingDto meetingDto
+    ) {
+        return service.updateMeeting(meetingDto).thenApply(MeetingDto::fromModel);
     }
 }

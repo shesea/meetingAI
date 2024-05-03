@@ -5,12 +5,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import spbu.meetingAI.entity.Meeting;
 
 public class MeetingDto {
     public boolean done;
 
-    public UUID id;
+    public String id;
 
     public String title;
 
@@ -36,11 +38,11 @@ public class MeetingDto {
 
     public List<String> quotes;
 
-    public UUID userId;
+    public String userId;
 
-    public static MeetingDto convertFromModel(Meeting meeting) {
+    public static MeetingDto fromModel(Meeting meeting) {
         var dto = new MeetingDto();
-        dto.id = meeting.getId();
+        dto.id = meeting.getId().toString();
         dto.title = meeting.getTitle();
         dto.createdAt = meeting.getCreatedAt();
         dto.updatedAt = meeting.getUpdatedAt();
@@ -56,7 +58,7 @@ public class MeetingDto {
         if (meeting.getCreatedBy() == null) {
             dto.userId = null;
         } else {
-            dto.userId = meeting.getCreatedBy().getId();
+            dto.userId = meeting.getCreatedBy().getId().toString();
         }
         dto.done = dto.summary != null && dto.keyWords != null && dto.quotes != null && dto.description != null && dto.title != null;
         return dto;
