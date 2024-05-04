@@ -7,7 +7,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -29,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.repository.MeetingRepository;
+import spbu.meetingAI.util.GeneratedTextParser;
 
 @Service
 public class MeetingService {
@@ -83,16 +83,16 @@ public class MeetingService {
         String operationId = sendToRecognition(meeting);
         String transcript = getTranscript(operationId);
         String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
-        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста, напиши их обязательно в одну строку", transcript).toLowerCase();
+        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
         String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
         String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
-        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат, не используй никаких кавычек в цитатах. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
+        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
         meeting.setTranscript(transcript);
         meeting.setSummary(summary);
-        meeting.setKeyWords(List.of(keyWords.substring(0, keyWords.length() - 1).split(", ")));
+        meeting.setKeyWords(GeneratedTextParser.getListValues(keyWords, true));
         meeting.setDescription(description);
-        meeting.setTitle(title);
-        meeting.setQuotes(Arrays.stream(quotes.split("\n\n")).map(s -> s.substring(3)).toList());
+        meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
+        meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
         meetingRepository.save(meeting);
     }
 
