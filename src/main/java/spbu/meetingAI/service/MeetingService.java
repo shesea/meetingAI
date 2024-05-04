@@ -103,7 +103,6 @@ public class MeetingService {
 
     public Meeting createMeeting(MultipartFile file) {
         Meeting meeting = new Meeting();
-        meeting.setTitle(file.getName());
         meeting.setCreatedAt(LocalDateTime.now());
         return meeting;
     }
@@ -111,22 +110,27 @@ public class MeetingService {
     public void uploadRecording(MultipartFile file) throws InterruptedException, URISyntaxException, IOException {
         Meeting meeting = createMeeting(file);
         System.out.println(meeting.getId());
+        meeting.setDuration(Duration.of(file.getSize() / 64_000, ChronoUnit.SECONDS));
+        meetingRepository.save(meeting);
         uploadToS3(file, meeting);
-        Thread.sleep(10000);
         String operationId = sendToRecognition(meeting);
         String transcript = getTranscript(operationId);
-        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
-        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
-        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
-        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
-        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
         meeting.setTranscript(transcript);
+        meetingRepository.save(meeting);
+        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
         meeting.setSummary(summary);
+        meetingRepository.save(meeting);
+        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
         meeting.setKeyWords(GeneratedTextParser.getListValues(keyWords, true));
+        meetingRepository.save(meeting);
+        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
         meeting.setDescription(description);
+        meetingRepository.save(meeting);
+        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
         meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
+        meetingRepository.save(meeting);
+        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
         meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
-        meeting.setDuration(Duration.of(file.getSize() / 64_000, ChronoUnit.SECONDS));
         meetingRepository.save(meeting);
     }
 
@@ -216,6 +220,7 @@ public class MeetingService {
         if (chunks == null) {
             return "";
         }
+        System.out.println(chunks);
         for (JsonNode chunk: chunks) {
             var channel = chunk.get("channelTag").asInt();
             if (channel != 1) {
@@ -226,7 +231,10 @@ public class MeetingService {
                 System.out.println(alternatives.textValue());
             } else {
                 var text = alternatives.get(0).get("text").textValue();
-                transcript.append(" ").append(text);
+                if (!transcript.isEmpty()) {
+                    transcript.append(" ");
+                }
+                transcript.append(text);
             }
         }
         System.out.println(transcript);

@@ -4,10 +4,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import spbu.meetingAI.entity.Meeting;
 
 public class MeetingDto {
