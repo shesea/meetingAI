@@ -12,6 +12,7 @@ import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.service.MeetingService;
 
 @RestController
+@CrossOrigin("*")
 @RequestMapping("/api/meeting")
 public class MeetingController {
     private final MeetingService service;
