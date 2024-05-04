@@ -5,7 +5,9 @@ import java.net.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -93,6 +95,7 @@ public class MeetingService {
         meeting.setDescription(description);
         meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
         meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
+        meeting.setDuration(Duration.of(file.getSize() / 64_000, ChronoUnit.SECONDS));
         meetingRepository.save(meeting);
     }
 
