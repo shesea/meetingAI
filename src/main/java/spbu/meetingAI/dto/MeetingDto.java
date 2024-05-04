@@ -1,5 +1,6 @@
 package spbu.meetingAI.dto;
 
+import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +39,8 @@ public class MeetingDto {
 
     public List<String> quotes;
 
+    public URL videoLink;
+
     public String userId;
 
     public static MeetingDto fromModel(Meeting meeting) {
@@ -55,6 +58,7 @@ public class MeetingDto {
         dto.participants = meeting.getParticipants();
         dto.keyWords = meeting.getKeyWords();
         dto.quotes = meeting.getQuotes();
+        dto.videoLink = meeting.getVideoLink();
         if (meeting.getCreatedBy() == null) {
             dto.userId = null;
         } else {

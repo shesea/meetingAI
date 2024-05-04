@@ -18,6 +18,7 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,7 +35,7 @@ import spbu.meetingAI.util.GeneratedTextParser;
 
 @Service
 public class MeetingService {
-    final private String BUCKET_NAME = "mediafiles";
+    final public String BUCKET_NAME = "mediafiles";
     final private String EXTENSION = ".pcm";
     final private String S3_ENDPOINT = "storage.yandexcloud.net";
     final private String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
@@ -55,8 +56,37 @@ public class MeetingService {
     }
 
     public CompletableFuture<Meeting> getMeeting(UUID id) {
-        return CompletableFuture.completedFuture(meetingRepository.findById(id).orElseThrow());
-                //TODO add handle
+        Meeting meeting = meetingRepository.findById(id).orElse(null);
+        if (meeting == null) {
+            throw new RuntimeException("Meeting not found with id: " + id);
+        }
+        meeting.setVideoLink(getS3LinkToVideo(id));
+        return CompletableFuture.completedFuture(meeting);
+        //TODO add handle
+    }
+
+    private URL getS3LinkToVideo(UUID id) {
+        AWSCredentials credentials;
+        try {
+            credentials = new ProfileCredentialsProvider().getCredentials();
+        } catch (Exception e) {
+            throw new AmazonClientException(
+                    "Cannot load the credentials from the credential profiles file. " +
+                            "Please make sure that your credentials file is at the correct " +
+                            "location (~/.aws/credentials), and is in valid format.",
+                    e);
+        }
+
+        AmazonS3 s3 = AmazonS3ClientBuilder.standard()
+                .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                .withEndpointConfiguration(
+                        new AmazonS3ClientBuilder.EndpointConfiguration(
+                                S3_ENDPOINT, SIGNING_REGION
+                        )
+                )
+                .build();
+
+        return s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "video1661560214.mp4"));
     }
 
     public CompletableFuture<Meeting> updateMeeting(MeetingDto dto) {
@@ -64,9 +94,10 @@ public class MeetingService {
         if (meeting == null) {
             throw new RuntimeException("Meeting not found with id: " + UUID.fromString(dto.id));
         }
-
         meeting.setCustomSummary(dto.customSummary);
-        return CompletableFuture.completedFuture(meetingRepository.save(meeting));
+        Meeting updatedMeeting = meetingRepository.save(meeting);
+        updatedMeeting.setVideoLink(getS3LinkToVideo(meeting.getId()));
+        return CompletableFuture.completedFuture(updatedMeeting);
     }
 
 

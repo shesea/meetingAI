@@ -1,5 +1,6 @@
 package spbu.meetingAI.entity;
 
+import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -60,6 +61,9 @@ public class Meeting {
     @Convert(converter = MeetingJsonConverter.class)
     @ColumnTransformer(write = "?::jsonb")
     private List<String> quotes;
+
+    @Transient
+    private URL videoLink;
 
     @ManyToOne
     @JoinColumn(name = "createdBy")
@@ -178,5 +182,13 @@ public class Meeting {
 
     public void setQuotes(List<String> quotes) {
         this.quotes = quotes;
+    }
+
+    public URL getVideoLink() {
+        return videoLink;
+    }
+
+    public void setVideoLink(URL videoLink) {
+        this.videoLink = videoLink;
     }
 }
