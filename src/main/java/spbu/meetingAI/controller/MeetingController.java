@@ -31,13 +31,13 @@ public class MeetingController {
     }
 
     @PostMapping("/upload")
-    public void handleFileUploadUsingCurl(
+    public String handleFileUploadUsingCurl(
             @RequestParam("file") MultipartFile file) throws IOException, InterruptedException, URISyntaxException {
 
         System.out.println("Got file " + file.getSize());
         System.out.println("Content type is " + file.getContentType());
 
-        service.uploadRecording(file);
+        return service.uploadRecording(file).toString();
 
     }
 

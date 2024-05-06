@@ -11,6 +11,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSCredentials;
@@ -23,9 +25,11 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.dto.MeetingDto;
@@ -35,18 +39,17 @@ import spbu.meetingAI.util.GeneratedTextParser;
 
 @Service
 public class MeetingService {
-    final public String BUCKET_NAME = "mediafiles";
-    final private String EXTENSION = ".pcm";
-    final private String S3_ENDPOINT = "storage.yandexcloud.net";
-    final private String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
-    final private String OPERATION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
-    final private String COMPLETION_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync";
-    final private String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
-    final private String SIGNING_REGION = "ru-central1";
+    public final String BUCKET_NAME = "mediafiles";
+    private final String EXTENSION = ".pcm";
+    private final String S3_ENDPOINT = "storage.yandexcloud.net";
+    private final String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
+    private final String OPERATION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
+    private final String COMPLETION_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync";
+    private final String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
+    private final String SIGNING_REGION = "ru-central1";
 
     final static HttpClient client = HttpClient.newHttpClient();
     final static ObjectMapper mapper = new ObjectMapper();
-
 
     MeetingRepository meetingRepository;
 
@@ -107,7 +110,7 @@ public class MeetingService {
         return meeting;
     }
 
-    public void uploadRecording(MultipartFile file) throws InterruptedException, URISyntaxException, IOException {
+    public UUID uploadRecording(MultipartFile file) throws IOException, URISyntaxException, InterruptedException {
         Meeting meeting = createMeeting(file);
         System.out.println(meeting.getId());
         meeting.setDuration(Duration.of(file.getSize() / 64_000, ChronoUnit.SECONDS));
@@ -132,6 +135,7 @@ public class MeetingService {
         String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
         meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
         meetingRepository.save(meeting);
+        return meeting.getId();
     }
 
     private void uploadToS3(MultipartFile file, Meeting meeting) throws IOException {
@@ -237,7 +241,6 @@ public class MeetingService {
                 transcript.append(text);
             }
         }
-        System.out.println(transcript);
         return transcript.toString();
     }
 

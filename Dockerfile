@@ -24,5 +24,5 @@ COPY ssl/private_key.pem ssl/private_key.pem
 RUN mkdir /root/.aws
 COPY .aws/credentials /root/.aws/credentials
 COPY target/meetingAI-0.0.1-SNAPSHOT.jar app.jar
-ENTRYPOINT ["java","-jar","app.jar"]
+ENTRYPOINT ["java","-jar", "-Xmx2048m","app.jar"]
 EXPOSE 8002
