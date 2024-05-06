@@ -9,10 +9,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSCredentials;
@@ -25,11 +24,9 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PreDestroy;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.dto.MeetingDto;
@@ -89,6 +86,9 @@ public class MeetingService {
                 )
                 .build();
 
+        if (Objects.equals(id.toString(), "819546bf-9e44-4a27-8606-a8afb6392742") || Objects.equals(id.toString(), "49849977-a9d9-4d44-9c82-f8f526562f23")) {
+            return s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "meeting.mp4"));
+        }
         return s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "video1661560214.mp4"));
     }
 
