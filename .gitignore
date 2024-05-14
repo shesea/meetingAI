@@ -1,4 +1,5 @@
 HELP.md
+meeting-ai-logs/
 target/
 ssl/
 !.mvn/wrapper/maven-wrapper.jar

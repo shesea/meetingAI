@@ -9,26 +9,17 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.repository.MeetingRepository;
@@ -36,14 +27,16 @@ import spbu.meetingAI.util.GeneratedTextParser;
 
 @Service
 public class MeetingService {
-    public final String BUCKET_NAME = "mediafiles";
-    private final String EXTENSION = ".pcm";
-    private final String S3_ENDPOINT = "storage.yandexcloud.net";
-    private final String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
-    private final String OPERATION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
-    private final String COMPLETION_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync";
-    private final String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
-    private final String SIGNING_REGION = "ru-central1";
+    private static final Logger logger
+            = LoggerFactory.getLogger(MeetingService.class);
+
+    public static final String BUCKET_NAME = "mediafiles";
+    private static final String EXTENSION = ".pcm";
+    private static final String S3_ENDPOINT = "storage.yandexcloud.net";
+    private static final String TRANSCRIPTION_ENDPOINT = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize";
+    private static final String OPERATION_RESULT_ENDPOINT = "https://operation.api.cloud.yandex.net/operations/";
+    private static final String COMPLETION_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync";
+    private static final String LANGUAGE_MODEL_URI = "gpt://b1gsskjdo0qgt9m8g39i/yandexgpt/latest";
 
     final static HttpClient client = HttpClient.newHttpClient();
     final static ObjectMapper mapper = new ObjectMapper();
@@ -55,41 +48,54 @@ public class MeetingService {
         this.meetingRepository = meetingRepository;
     }
 
+    public void createMeeting(String id, long fileSize) throws IOException, URISyntaxException, InterruptedException {
+        Meeting meeting = new Meeting(UUID.fromString(id));
+        meeting.setCreatedAt(LocalDateTime.now());
+        meeting.setDuration(Duration.of(fileSize / 64_000, ChronoUnit.SECONDS));
+        logger.info("Created meeting entity with id {} with createdAt {} and duration {}", meeting.getId(), meeting.getCreatedAt(), meeting.getDuration());
+        meetingRepository.save(meeting);
+
+        String operationId = sendToRecognition(meeting);
+        String transcript = getTranscript(operationId);
+        logger.info("Setting transcript in meeting {}", meeting.getId());
+        meeting.setTranscript(transcript);
+
+        logger.info("Creating summary for meeting {}", meeting.getId());
+        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
+        logger.info("Setting summary in meeting {}", meeting.getId());
+        meeting.setSummary(summary);
+
+        logger.info("Creating key words for meeting {}", meeting.getId());
+        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
+        logger.info("Setting key words in meeting {}", meeting.getId());
+        meeting.setKeyWords(GeneratedTextParser.getListValues(keyWords, true));
+
+        logger.info("Creating description for meeting {}", meeting.getId());
+        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
+        logger.info("Setting description in meeting {}", meeting.getId());
+        meeting.setDescription(description);
+
+        logger.info("Creating title for meeting {}", meeting.getId());
+        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
+        logger.info("Settings title in meeting {}", meeting.getId());
+        meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
+
+        logger.info("Creating quotes for meeting {}", meeting.getId());
+        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
+        logger.info("Setting quotes in meeting {}", meeting.getId());
+        meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
+
+        logger.info("Saving meeting {}", meeting.getId());
+        meetingRepository.save(meeting);
+    }
+
     public CompletableFuture<Meeting> getMeeting(UUID id) {
         Meeting meeting = meetingRepository.findById(id).orElse(null);
         if (meeting == null) {
             throw new RuntimeException("Meeting not found with id: " + id);
         }
-        meeting.setVideoLink(getS3LinkToVideo(id));
         return CompletableFuture.completedFuture(meeting);
         //TODO add handle
-    }
-
-    private URL getS3LinkToVideo(UUID id) {
-        AWSCredentials credentials;
-        try {
-            credentials = new ProfileCredentialsProvider().getCredentials();
-        } catch (Exception e) {
-            throw new AmazonClientException(
-                    "Cannot load the credentials from the credential profiles file. " +
-                            "Please make sure that your credentials file is at the correct " +
-                            "location (~/.aws/credentials), and is in valid format.",
-                    e);
-        }
-
-        AmazonS3 s3 = AmazonS3ClientBuilder.standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withEndpointConfiguration(
-                        new AmazonS3ClientBuilder.EndpointConfiguration(
-                                S3_ENDPOINT, SIGNING_REGION
-                        )
-                )
-                .build();
-
-        if (Objects.equals(id.toString(), "819546bf-9e44-4a27-8606-a8afb6392742") || Objects.equals(id.toString(), "49849977-a9d9-4d44-9c82-f8f526562f23")) {
-            return s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "meeting.mp4"));
-        }
-        return s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "video1661560214.mp4"));
     }
 
     public CompletableFuture<Meeting> updateMeeting(MeetingDto dto) {
@@ -99,71 +105,14 @@ public class MeetingService {
         }
         meeting.setCustomSummary(dto.customSummary);
         Meeting updatedMeeting = meetingRepository.save(meeting);
-        updatedMeeting.setVideoLink(getS3LinkToVideo(meeting.getId()));
+        logger.info("Successfully updated meeting {}", meeting.getId());
         return CompletableFuture.completedFuture(updatedMeeting);
     }
 
-
-    public Meeting createMeeting(MultipartFile file) {
-        Meeting meeting = new Meeting();
-        meeting.setCreatedAt(LocalDateTime.now());
-        return meeting;
-    }
-
-    public UUID uploadRecording(MultipartFile file) throws IOException, URISyntaxException, InterruptedException {
-        Meeting meeting = createMeeting(file);
-        System.out.println(meeting.getId());
-        meeting.setDuration(Duration.of(file.getSize() / 64_000, ChronoUnit.SECONDS));
-        meetingRepository.save(meeting);
-        uploadToS3(file, meeting);
-        String operationId = sendToRecognition(meeting);
-        String transcript = getTranscript(operationId);
-        meeting.setTranscript(transcript);
-        meetingRepository.save(meeting);
-        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
-        meeting.setSummary(summary);
-        meetingRepository.save(meeting);
-        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
-        meeting.setKeyWords(GeneratedTextParser.getListValues(keyWords, true));
-        meetingRepository.save(meeting);
-        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
-        meeting.setDescription(description);
-        meetingRepository.save(meeting);
-        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
-        meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
-        meetingRepository.save(meeting);
-        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
-        meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
-        meetingRepository.save(meeting);
-        return meeting.getId();
-    }
-
-    private void uploadToS3(MultipartFile file, Meeting meeting) throws IOException {
-        AWSCredentials credentials;
-        try {
-            credentials = new ProfileCredentialsProvider().getCredentials();
-        } catch (Exception e) {
-            throw new AmazonClientException(
-                    "Cannot load the credentials from the credential profiles file. " +
-                            "Please make sure that your credentials file is at the correct " +
-                            "location (~/.aws/credentials), and is in valid format.",
-                    e);
-        }
-
-        AmazonS3 s3 = AmazonS3ClientBuilder.standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withEndpointConfiguration(
-                        new AmazonS3ClientBuilder.EndpointConfiguration(
-                                S3_ENDPOINT, SIGNING_REGION
-                        )
-                )
-                .build();
-
-        String key = meeting.getId() + EXTENSION;
-        ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentLength(file.getSize());
-
-        s3.putObject(new PutObjectRequest(BUCKET_NAME, key, new ByteArrayInputStream(file.getBytes()), metadata));
+    public void deleteMeeting(UUID id) {
+        logger.info("Deleting meeting {}", id);
+        meetingRepository.deleteById(id);
+        logger.info("Successfully deleted meeting {}", id);
     }
 
     private String sendToRecognition(Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
@@ -189,8 +138,9 @@ public class MeetingService {
 
         var operationId = "";
 
+        logger.info("Sending meeting {} to recognition", meeting.getId());
         var response = client.send(request, HttpResponse.BodyHandlers.ofLines());
-        System.out.println(response.statusCode());
+        logger.info("Got response code: {}", response.statusCode());
         var body = response.body();
         //TODO add status code handling
         var idString = body.filter(s -> s.contains("id")).findFirst();
@@ -199,10 +149,11 @@ public class MeetingService {
             operationId = temp.substring(8, temp.length() - 2);
             System.out.println(operationId);
         }
+        logger.info("Got operation id: {}", operationId);
         return operationId;
     }
 
-    public String getTranscript(String operationId) throws URISyntaxException, InterruptedException, IOException {
+    private String getTranscript(String operationId) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
                 .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
@@ -212,9 +163,11 @@ public class MeetingService {
         var str = "";
         while (!found) {
             Thread.sleep(10000);
+            logger.info("Sending request to get operation: {}", operationId);
             str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             found = str.contains("\"done\": true,");
         }
+        logger.info("Received 'done' status in operation {}", operationId);
 
         StringBuilder transcript = new StringBuilder();
         ObjectMapper mapper = new ObjectMapper();
@@ -222,18 +175,21 @@ public class MeetingService {
         JsonNode root = mapper.readTree(str);
         var chunks = root.get("response").get("chunks");
         if (chunks == null) {
+            logger.info("Got no chunks in operation {}, returning empty transcript", operationId);
             return "";
         }
-        System.out.println(chunks);
         for (JsonNode chunk: chunks) {
             var channel = chunk.get("channelTag").asInt();
             if (channel != 1) {
                 continue;
             }
             var alternatives = chunk.get("alternatives");
-            if (alternatives.size() != 1) {
-                System.out.println(alternatives.textValue());
+            if (alternatives.isEmpty()) {
+                logger.info("Got no alternatives in chunk: {}", chunk);
             } else {
+                if (alternatives.size() > 1) {
+                    logger.info("Got more than one alternative in chunk: {}", chunk);
+                }
                 var text = alternatives.get(0).get("text").textValue();
                 if (!transcript.isEmpty()) {
                     transcript.append(" ");
@@ -241,10 +197,11 @@ public class MeetingService {
                 transcript.append(text);
             }
         }
+        logger.info("Successfully received transcript: {}", transcript);
         return transcript.toString();
     }
 
-    public String getGeneratedValue(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
+    private String getGeneratedValue(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
         var response = sendGptRequest(command, transcript);
         System.out.println(response.statusCode());
         var body = response.body();
@@ -290,7 +247,7 @@ public class MeetingService {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    public String getOperationId(String body) {
+    private String getOperationId(String body) {
         var operationId = "";
         var idString = Arrays.stream(body.split(",")).filter(s -> s.contains("id")).findFirst();
         if (idString.isPresent()) {
@@ -301,7 +258,7 @@ public class MeetingService {
         return operationId;
     }
 
-    public String getCompleteOperation(String operationId) throws URISyntaxException, InterruptedException, IOException {
+    private String getCompleteOperation(String operationId) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
                 .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))

@@ -1,8 +1,10 @@
 package spbu.meetingAI;
 
+import jakarta.servlet.Filter;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.web.filter.ShallowEtagHeaderFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -21,5 +23,10 @@ public class MeetingAiApplication {
 				registry.addMapping("/**");
 			}
 		};
+	}
+
+	@Bean
+	public Filter filter(){
+        return new ShallowEtagHeaderFilter();
 	}
 }

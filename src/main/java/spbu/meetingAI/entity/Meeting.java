@@ -16,7 +16,7 @@ import spbu.meetingAI.util.MeetingJsonConverter;
 @Table(name = "meetings")
 public class Meeting {
     @Id
-    private UUID id = UUID.randomUUID();
+    private UUID id;
 
     @Column(name = "title")
     private String title;
@@ -71,6 +71,11 @@ public class Meeting {
 
     public Meeting() {
     }
+
+    public Meeting(UUID id) {
+        this.id = id;
+    }
+
 
     public UUID getId() {
         return id;
