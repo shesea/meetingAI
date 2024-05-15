@@ -9,6 +9,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import spbu.meetingAI.service.MeetingService;
 
+import java.util.concurrent.CompletableFuture;
+
 @Component
 @Transactional
 public class KafkaConsumer {
@@ -21,14 +23,20 @@ public class KafkaConsumer {
         this.meetingService = meetingService;
     }
 
-    @KafkaListener(topics = "test-meeting.kafka.post.meeting", groupId = "meetings")
+    @KafkaListener(topics = "meeting-ai.kafka.post.meeting", groupId = "meetings", concurrency = "4")
     public void processUploadMeeting(String fileInfoJson) {
         logger.info("Received file = '{}'", fileInfoJson);
         try {
             ObjectMapper mapper = new ObjectMapper();
             FileInfo info = mapper.readValue(fileInfoJson, FileInfo.class);
-            meetingService.createMeeting(info.id(), info.fileSize());
-            logger.info("Success process meeting '{}' with topic '{}'", info.id(), "test-meeting.kafka.post.meeting");
+            CompletableFuture.runAsync(() -> {
+                try {
+                    meetingService.createMeeting(info.id(), info.fileSize());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }).thenAccept(ignored ->
+                    logger.info("Success process meeting '{}' with topic '{}'", info.id(), "meeting-ai.kafka.post.meeting"));
         } catch (Exception e){
             logger.error("An error occurred! '{}'", e.getMessage());
         }
