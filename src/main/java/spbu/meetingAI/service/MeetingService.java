@@ -147,7 +147,6 @@ public class MeetingService {
         if (idString.isPresent()) {
             var temp = idString.get();
             operationId = temp.substring(8, temp.length() - 2);
-            System.out.println(operationId);
         }
         logger.info("Got operation id: {}", operationId);
         return operationId;
@@ -203,7 +202,6 @@ public class MeetingService {
 
     private String getGeneratedValue(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
         var response = sendGptRequest(command, transcript);
-        System.out.println(response.statusCode());
         var body = response.body();
         //TODO add status code handling
         var operationId = getOperationId(body);
@@ -216,7 +214,6 @@ public class MeetingService {
         JsonNode root = mapper.readTree(responseMessage);
         String summary = root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
 
-        System.out.println(summary);
         return summary;
     }
 
@@ -253,7 +250,6 @@ public class MeetingService {
         if (idString.isPresent()) {
             var temp = idString.get();
             operationId = temp.substring(7, temp.length() - 1);
-            System.out.println(operationId);
         }
         return operationId;
     }
