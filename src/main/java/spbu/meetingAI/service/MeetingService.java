@@ -269,9 +269,9 @@ public class MeetingService {
 
         boolean found = false;
         var str = "";
-        long startTime = System.currentTimeMillis();
-        while (!found && (System.currentTimeMillis() - startTime) < 50000) {
-            Thread.sleep(1000);
+        //long startTime = System.currentTimeMillis();
+        while (!found) {
+            Thread.sleep(5000);
             str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             found = str.contains("\"done\": true,");
         }
