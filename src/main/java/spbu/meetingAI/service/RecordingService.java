@@ -82,7 +82,6 @@ public class RecordingService {
             url = s3.generatePresignedUrl(new GeneratePresignedUrlRequest(BUCKET_NAME, "video1661560214.mp4"));
         }
         meeting.setVideoLink(url);
-        logger.info("Got video link '{}' for meeting with id: {}", url, meeting.getId());
         return meeting;
     }
 

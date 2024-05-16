@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -62,28 +63,32 @@ public class MeetingService {
 
         logger.info("Creating summary for meeting {}", meeting.getId());
         String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
-        logger.info("Setting summary in meeting {}", meeting.getId());
+        logger.info("Setting summary: '{}' in meeting {}", summary, meeting.getId());
         meeting.setSummary(summary);
 
         logger.info("Creating key words for meeting {}", meeting.getId());
         String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
-        logger.info("Setting key words in meeting {}", meeting.getId());
-        meeting.setKeyWords(GeneratedTextParser.getListValues(keyWords, true));
+        List<String> parsedKeyWords = GeneratedTextParser.getListValues(keyWords, true);
+        logger.info("Setting key words: '{}' in meeting {}", parsedKeyWords, meeting.getId());
+        meeting.setKeyWords(parsedKeyWords);
 
         logger.info("Creating description for meeting {}", meeting.getId());
         String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
-        logger.info("Setting description in meeting {}", meeting.getId());
-        meeting.setDescription(description);
+        String parsedDescription = GeneratedTextParser.removeExcessChars(description);
+        logger.info("Setting description: '{}' in meeting {}", parsedDescription, meeting.getId());
+        meeting.setDescription(parsedDescription);
 
         logger.info("Creating title for meeting {}", meeting.getId());
         String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
-        logger.info("Settings title in meeting {}", meeting.getId());
-        meeting.setTitle(GeneratedTextParser.removeExcessChars(title));
+        String parsedTitle = GeneratedTextParser.removeExcessChars(title);
+        logger.info("Settings title: '{}' in meeting {}", parsedTitle, meeting.getId());
+        meeting.setTitle(parsedTitle);
 
         logger.info("Creating quotes for meeting {}", meeting.getId());
         String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
-        logger.info("Setting quotes in meeting {}", meeting.getId());
-        meeting.setQuotes(GeneratedTextParser.getListValues(quotes, false));
+        List<String> parsedQuotes = GeneratedTextParser.getListValues(quotes, false);
+        logger.info("Setting quotes: '{}' in meeting {}", GeneratedTextParser.getListValues(quotes, false), meeting.getId());
+        meeting.setQuotes(parsedQuotes);
 
         logger.info("Saving meeting {}", meeting.getId());
         meetingRepository.save(meeting);
@@ -205,6 +210,7 @@ public class MeetingService {
         var body = response.body();
         //TODO add status code handling
         var operationId = getOperationId(body);
+        logger.info("Generation request has sent with operation id: {}", operationId);
 
         if (operationId.isEmpty()) {
             return "";
@@ -263,8 +269,9 @@ public class MeetingService {
 
         boolean found = false;
         var str = "";
-        while (!found) {
-            Thread.sleep(10000);
+        long startTime = System.currentTimeMillis();
+        while (!found && (System.currentTimeMillis() - startTime) < 50000) {
+            Thread.sleep(1000);
             str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             found = str.contains("\"done\": true,");
         }

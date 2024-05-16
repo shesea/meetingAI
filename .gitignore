@@ -2,6 +2,8 @@ HELP.md
 meeting-ai-logs/
 target/
 ssl/
+scripts/Dockerfile
+scripts/jwt-app/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
