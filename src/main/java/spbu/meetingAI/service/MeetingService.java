@@ -20,9 +20,11 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import spbu.meetingAI.dto.MeetingDto;
 import spbu.meetingAI.entity.Meeting;
+import spbu.meetingAI.kafka.KafkaProducer;
 import spbu.meetingAI.repository.MeetingRepository;
 import spbu.meetingAI.util.GeneratedTextParser;
 
@@ -30,6 +32,14 @@ import spbu.meetingAI.util.GeneratedTextParser;
 public class MeetingService {
     private static final Logger logger
             = LoggerFactory.getLogger(MeetingService.class);
+
+    private final KafkaProducer producer;
+
+    @Value("${spring.kafka.consumer.group-id}")
+    String groupId;
+
+    @Value("${meetings.kafka.post.meeting}")
+    String postMeetingTopic;
 
     public static final String BUCKET_NAME = "mediafiles";
     private static final String EXTENSION = ".pcm";
@@ -45,47 +55,71 @@ public class MeetingService {
     MeetingRepository meetingRepository;
 
     @Autowired
-    public MeetingService(MeetingRepository meetingRepository) {
+    public MeetingService(KafkaProducer producer, MeetingRepository meetingRepository) {
+        this.producer = producer;
         this.meetingRepository = meetingRepository;
     }
 
     public void createMeeting(String id, long fileSize) throws IOException, URISyntaxException, InterruptedException {
-        Meeting meeting = new Meeting(UUID.fromString(id));
-        meeting.setCreatedAt(LocalDateTime.now());
-        meeting.setDuration(Duration.of(fileSize / 64_000, ChronoUnit.SECONDS));
-        logger.info("Created meeting entity with id {} with createdAt {} and duration {}", meeting.getId(), meeting.getCreatedAt(), meeting.getDuration());
-        meetingRepository.save(meeting);
+        Meeting meeting = meetingRepository.findById(UUID.fromString(id)).orElse(null);
+        if (meeting == null) {
+            meeting = new Meeting(UUID.fromString(id));
+            meeting.setCreatedAt(LocalDateTime.now());
+            meeting.setDuration(Duration.of(fileSize / 64_000, ChronoUnit.SECONDS));
+            logger.info("Created meeting entity with id {} with createdAt {} and duration {}", meeting.getId(), meeting.getCreatedAt(), meeting.getDuration());
+            meetingRepository.save(meeting);
 
-        String operationId = sendToRecognition(meeting);
-        String transcript = getTranscript(operationId);
-        logger.info("Setting transcript in meeting {}", meeting.getId());
-        meeting.setTranscript(transcript);
+            String operationId = sendToRecognition(meeting);
+            String transcript = getTranscript(operationId);
+            logger.info("Setting transcript in meeting {}", meeting.getId());
+            meeting.setTranscript(transcript);
+        }
 
         logger.info("Creating summary for meeting {}", meeting.getId());
-        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", transcript);
+        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", meeting.getTranscript(), meeting);
+        if (summary.isEmpty()) {
+            logger.warn("Creating summary failed in meeting {}", meeting.getId());
+            return;
+        }
         logger.info("Setting summary: '{}' in meeting {}", summary, meeting.getId());
         meeting.setSummary(summary);
 
         logger.info("Creating key words for meeting {}", meeting.getId());
-        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", transcript);
+        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", meeting.getTranscript(), meeting);
+        if (keyWords.isEmpty()) {
+            logger.warn("Creating key words failed in meeting {}", meeting.getId());
+            return;
+        }
         List<String> parsedKeyWords = GeneratedTextParser.getListValues(keyWords, true);
         logger.info("Setting key words: '{}' in meeting {}", parsedKeyWords, meeting.getId());
         meeting.setKeyWords(parsedKeyWords);
 
         logger.info("Creating description for meeting {}", meeting.getId());
-        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", transcript);
+        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", meeting.getTranscript(), meeting);
+        if (description.isEmpty()) {
+            logger.warn("Creating description failed in meeting {}", meeting.getId());
+            return;
+        }
         String parsedDescription = GeneratedTextParser.removeExcessChars(description);
         logger.info("Setting description: '{}' in meeting {}", parsedDescription, meeting.getId());
         meeting.setDescription(parsedDescription);
 
         logger.info("Creating title for meeting {}", meeting.getId());
-        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", transcript);
+        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", meeting.getTranscript(), meeting);
+        if (title.isEmpty()) {
+            logger.warn("Creating title failed in meeting {}", meeting.getId());
+            return;
+        }
         String parsedTitle = GeneratedTextParser.removeExcessChars(title);
         logger.info("Settings title: '{}' in meeting {}", parsedTitle, meeting.getId());
         meeting.setTitle(parsedTitle);
 
         logger.info("Creating quotes for meeting {}", meeting.getId());
-        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", transcript);
+        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", meeting.getTranscript(), meeting);
+        if (quotes.isEmpty()) {
+            logger.warn("Creating quotes failed in meeting {}", meeting.getId());
+            return;
+        }
         List<String> parsedQuotes = GeneratedTextParser.getListValues(quotes, false);
         logger.info("Setting quotes: '{}' in meeting {}", GeneratedTextParser.getListValues(quotes, false), meeting.getId());
         meeting.setQuotes(parsedQuotes);
@@ -205,22 +239,23 @@ public class MeetingService {
         return transcript.toString();
     }
 
-    private String getGeneratedValue(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
+    private String getGeneratedValue(String command, String transcript, Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
         var response = sendGptRequest(command, transcript);
         var body = response.body();
         //TODO add status code handling
         var operationId = getOperationId(body);
-        logger.info("Generation request has sent with operation id: {}", operationId);
+        logger.info("Generation request has been sent with operation id: {}", operationId);
 
         if (operationId.isEmpty()) {
             return "";
         }
 
-        var responseMessage = getCompleteOperation(operationId);
+        var responseMessage = getCompleteOperation(operationId, meeting);
+        if (responseMessage.isEmpty()) {
+            return "";
+        }
         JsonNode root = mapper.readTree(responseMessage);
-        String summary = root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
-
-        return summary;
+        return root.get("response").get("alternatives").get(0).get("message").get("text").textValue();
     }
 
     private HttpResponse<String> sendGptRequest(String command, String transcript) throws URISyntaxException, IOException, InterruptedException {
@@ -260,7 +295,7 @@ public class MeetingService {
         return operationId;
     }
 
-    private String getCompleteOperation(String operationId) throws URISyntaxException, InterruptedException, IOException {
+    private String getCompleteOperation(String operationId, Meeting meeting) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
                 .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
@@ -269,11 +304,15 @@ public class MeetingService {
 
         boolean found = false;
         var str = "";
-        //long startTime = System.currentTimeMillis();
-        while (!found) {
-            Thread.sleep(5000);
+        long startTime = System.currentTimeMillis();
+        while (!found && System.currentTimeMillis() - startTime < 20000) {
+            Thread.sleep(2000);
             str = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             found = str.contains("\"done\": true,");
+        }
+        if (!found) {
+            producer.uploadFile(postMeetingTopic, groupId, meeting.getId().toString(), meeting.getDuration().getSeconds() * 64000);
+            return "";
         }
         return str;
     }

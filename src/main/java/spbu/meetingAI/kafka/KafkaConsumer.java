@@ -33,10 +33,10 @@ public class KafkaConsumer {
                 try {
                     meetingService.createMeeting(info.id(), info.fileSize());
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    logger.error("Got exception '{}' while processing meeting '{}'", e.getMessage(), info.id());
                 }
             }).thenAccept(ignored ->
-                    logger.info("Success process meeting '{}' with topic '{}'", info.id(), "meeting-ai.kafka.post.meeting"));
+                    logger.info("Processed meeting '{}' with topic '{}'", info.id(), "meeting-ai.kafka.post.meeting"));
         } catch (Exception e){
             logger.error("An error occurred! '{}'", e.getMessage());
         }

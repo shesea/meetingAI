@@ -28,8 +28,6 @@ public class MeetingController {
 
     private final KafkaProducer producer;
 
-    private final KafkaConsumer consumer;
-
     @Value("${spring.kafka.consumer.group-id}")
     String groupId;
 
@@ -41,7 +39,6 @@ public class MeetingController {
         this.recordingService = recordingService;
         this.meetingService = meetingService;
         this.producer = producer;
-        this.consumer = consumer;
     }
 
     @PostMapping("/upload")
