@@ -7,6 +7,7 @@
 Платформа находится по адресу [https://points-app.ru/](https://points-app.ru/)
 
 Пример результата встречи - https://points-app.ru/summary/819546bf-9e44-4a27-8606-a8afb6392742
+
 Пример 2 - https://points-app.ru/summary/6a4871d9-2500-4b3f-8623-717e24c4ba7b
 
 ## Как воспользоваться?
