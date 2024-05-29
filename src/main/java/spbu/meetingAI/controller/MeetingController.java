@@ -14,6 +14,7 @@ import spbu.meetingAI.kafka.KafkaConsumer;
 import spbu.meetingAI.kafka.KafkaProducer;
 import spbu.meetingAI.service.MeetingService;
 import spbu.meetingAI.service.RecordingService;
+import spbu.meetingAI.util.OperationType;
 
 @RestController
 @CrossOrigin("*")
@@ -48,7 +49,7 @@ public class MeetingController {
         try {
             String id = recordingService.uploadRecording(file).toString();
             logger.info("Generated id: {}", id);
-            producer.uploadFile(postMeetingTopic, groupId, id, file.getSize());
+            producer.uploadFile(postMeetingTopic, groupId, id, file.getSize(), OperationType.NONE, "");
             return id;
         } catch (Exception e){
             System.out.println("Got error: " + e.getMessage());

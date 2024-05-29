@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,6 +28,7 @@ import spbu.meetingAI.entity.Meeting;
 import spbu.meetingAI.kafka.KafkaProducer;
 import spbu.meetingAI.repository.MeetingRepository;
 import spbu.meetingAI.util.GeneratedTextParser;
+import spbu.meetingAI.util.OperationType;
 
 @Service
 public class MeetingService {
@@ -60,7 +62,7 @@ public class MeetingService {
         this.meetingRepository = meetingRepository;
     }
 
-    public void createMeeting(String id, long fileSize) throws IOException, URISyntaxException, InterruptedException {
+    public void createMeeting(String id, long fileSize, OperationType lastOperationType, String lastOperationId) throws IOException, URISyntaxException, InterruptedException {
         Meeting meeting = meetingRepository.findById(UUID.fromString(id)).orElse(null);
         if (meeting == null) {
             meeting = new Meeting(UUID.fromString(id));
@@ -76,54 +78,27 @@ public class MeetingService {
             meetingRepository.save(meeting);
         }
 
-        logger.info("Creating summary for meeting {}", meeting.getId());
-        String summary = getGeneratedValue("Напиши краткое содержание текста от первого лица", meeting.getTranscript(), meeting);
-        if (summary.isEmpty()) {
-            logger.warn("Creating summary failed in meeting {}", meeting.getId());
+        try {
+            switch (lastOperationType) {
+                case NONE, SUMMARY: {
+                    generateAndSet(meeting, OperationType.SUMMARY, lastOperationId);
+                }
+                case KEY_WORDS: {
+                    generateAndSet(meeting, OperationType.KEY_WORDS, lastOperationId);
+                }
+                case DESCRIPTION: {
+                    generateAndSet(meeting, OperationType.DESCRIPTION, lastOperationId);
+                }
+                case TITLE: {
+                    generateAndSet(meeting, OperationType.TITLE, lastOperationId);
+                }
+                case QUOTES: {
+                    generateAndSet(meeting, OperationType.QUOTES, lastOperationId);
+                }
+            }
+        } catch (TimeoutException e) {
             return;
         }
-        logger.info("Setting summary: '{}' in meeting {}", summary, meeting.getId());
-        meeting.setSummary(summary);
-
-        logger.info("Creating key words for meeting {}", meeting.getId());
-        String keyWords = getGeneratedValue("Выдели до 10 ключевых слов и словосочетаний из текста", meeting.getTranscript(), meeting);
-        if (keyWords.isEmpty()) {
-            logger.warn("Creating key words failed in meeting {}", meeting.getId());
-            return;
-        }
-        List<String> parsedKeyWords = GeneratedTextParser.getListValues(keyWords, true);
-        logger.info("Setting key words: '{}' in meeting {}", parsedKeyWords, meeting.getId());
-        meeting.setKeyWords(parsedKeyWords);
-
-        logger.info("Creating description for meeting {}", meeting.getId());
-        String description = getGeneratedValue("Опиши полученный текст в одном предложении, ни за что не используй markdown", meeting.getTranscript(), meeting);
-        if (description.isEmpty()) {
-            logger.warn("Creating description failed in meeting {}", meeting.getId());
-            return;
-        }
-        String parsedDescription = GeneratedTextParser.removeExcessChars(description);
-        logger.info("Setting description: '{}' in meeting {}", parsedDescription, meeting.getId());
-        meeting.setDescription(parsedDescription);
-
-        logger.info("Creating title for meeting {}", meeting.getId());
-        String title = getGeneratedValue("Придумай короткое название для текста без кавычек", meeting.getTranscript(), meeting);
-        if (title.isEmpty()) {
-            logger.warn("Creating title failed in meeting {}", meeting.getId());
-            return;
-        }
-        String parsedTitle = GeneratedTextParser.removeExcessChars(title);
-        logger.info("Settings title: '{}' in meeting {}", parsedTitle, meeting.getId());
-        meeting.setTitle(parsedTitle);
-
-        logger.info("Creating quotes for meeting {}", meeting.getId());
-        String quotes = getGeneratedValue("Выдели из текста от двух до четырех цитат длиной до 30 слов. Между всеми цитатами ставь ровно один перевод строки, нумеруй каждую цитату", meeting.getTranscript(), meeting);
-        if (quotes.isEmpty()) {
-            logger.warn("Creating quotes failed in meeting {}", meeting.getId());
-            return;
-        }
-        List<String> parsedQuotes = GeneratedTextParser.getListValues(quotes, false);
-        logger.info("Setting quotes: '{}' in meeting {}", GeneratedTextParser.getListValues(quotes, false), meeting.getId());
-        meeting.setQuotes(parsedQuotes);
 
         logger.info("Saving meeting {}", meeting.getId());
         meetingRepository.save(meeting);
@@ -153,6 +128,40 @@ public class MeetingService {
         logger.info("Deleting meeting {}", id);
         meetingRepository.deleteById(id);
         logger.info("Successfully deleted meeting {}", id);
+    }
+
+    private void generateAndSet(Meeting meeting, OperationType operationType, String lastOperationId) throws URISyntaxException, IOException, InterruptedException, TimeoutException {
+        logger.info("Creating {} for meeting {}", operationType.getName(), meeting.getId());
+        String generatedValue = getGeneratedValue(meeting, operationType, lastOperationId);
+
+        if (generatedValue.isEmpty()) {
+            logger.warn("Creating {} failed in meeting {}", operationType.getName(), meeting.getId());
+            throw new TimeoutException("Timeout exceeded");
+        }
+
+        logger.info("Setting {}: '{}' in meeting {}", operationType.getName(), generatedValue, meeting.getId());
+        switch (operationType) {
+            case SUMMARY -> {
+                meeting.setSummary(generatedValue);
+            }
+            case KEY_WORDS -> {
+                List<String> parsedKeyWords = GeneratedTextParser.getListValues(generatedValue, true);
+                meeting.setKeyWords(parsedKeyWords);
+            }
+            case DESCRIPTION -> {
+                String parsedDescription = GeneratedTextParser.removeExcessChars(generatedValue);
+                meeting.setDescription(parsedDescription);
+            }
+            case TITLE -> {
+                String parsedTitle = GeneratedTextParser.removeExcessChars(generatedValue);
+                meeting.setTitle(parsedTitle);
+            }
+            case QUOTES -> {
+                List<String> parsedQuotes = GeneratedTextParser.getListValues(generatedValue, false);
+                meeting.setQuotes(parsedQuotes);
+            }
+        }
+        meetingRepository.save(meeting);
     }
 
     private String sendToRecognition(Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
@@ -240,18 +249,21 @@ public class MeetingService {
         return transcript.toString();
     }
 
-    private String getGeneratedValue(String command, String transcript, Meeting meeting) throws URISyntaxException, IOException, InterruptedException {
-        var response = sendGptRequest(command, transcript);
-        var body = response.body();
-        //TODO add status code handling
-        var operationId = getOperationId(body);
-        logger.info("Generation request has been sent with operation id: {}", operationId);
-
+    private String getGeneratedValue(Meeting meeting, OperationType operationType, String lastOperationId) throws URISyntaxException, IOException, InterruptedException {
+        String operationId = lastOperationId;
         if (operationId.isEmpty()) {
-            return "";
+            var response = sendGptRequest(operationType.getCommand(), meeting.getTranscript());
+            var body = response.body();
+            //TODO add status code handling
+            operationId = getOperationId(body);
+            logger.info("Generation request has been sent with operation id: {}", operationId);
+
+            if (operationId.isEmpty()) {
+                return "";
+            }
         }
 
-        var responseMessage = getCompleteOperation(operationId, meeting);
+        var responseMessage = getCompleteOperation(operationId, meeting, operationType);
         if (responseMessage.isEmpty()) {
             return "";
         }
@@ -296,7 +308,7 @@ public class MeetingService {
         return operationId;
     }
 
-    private String getCompleteOperation(String operationId, Meeting meeting) throws URISyntaxException, InterruptedException, IOException {
+    private String getCompleteOperation(String operationId, Meeting meeting, OperationType operationType) throws URISyntaxException, InterruptedException, IOException {
         var request = HttpRequest.newBuilder()
                 .uri(new URI(OPERATION_RESULT_ENDPOINT + operationId))
                 .headers("Authorization", "Api-Key " + System.getenv("API_KEY"))
@@ -312,7 +324,7 @@ public class MeetingService {
             found = str.contains("\"done\": true,");
         }
         if (!found) {
-            //producer.uploadFile(postMeetingTopic, groupId, meeting.getId().toString(), meeting.getDuration().getSeconds() * 64000);
+            producer.uploadFile(postMeetingTopic, groupId, meeting.getId().toString(), meeting.getDuration().getSeconds() * 64000, operationType, operationId);
             return "";
         }
         return str;

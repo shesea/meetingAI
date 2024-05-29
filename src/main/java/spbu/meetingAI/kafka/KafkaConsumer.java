@@ -28,15 +28,15 @@ public class KafkaConsumer {
         logger.info("Received file = '{}'", fileInfoJson);
         try {
             ObjectMapper mapper = new ObjectMapper();
-            FileInfo info = mapper.readValue(fileInfoJson, FileInfo.class);
+            CreateMeetingRequest request = mapper.readValue(fileInfoJson, CreateMeetingRequest.class);
             CompletableFuture.runAsync(() -> {
                 try {
-                    meetingService.createMeeting(info.id(), info.fileSize());
+                    meetingService.createMeeting(request.id(), request.fileSize(), request.operationType(), request.operationId());
                 } catch (Exception e) {
-                    logger.error("Got exception '{}' while processing meeting '{}'", e.getMessage(), info.id());
+                    logger.error("Got exception '{}' while processing meeting '{}'", e.getMessage(), request.id());
                 }
             }).thenAccept(ignored ->
-                    logger.info("Processed meeting '{}' with topic '{}'", info.id(), "meeting-ai.kafka.post.meeting"));
+                    logger.info("Processed meeting '{}' with topic '{}'", request.id(), "meeting-ai.kafka.post.meeting"));
         } catch (Exception e){
             logger.error("An error occurred! '{}'", e.getMessage());
         }
