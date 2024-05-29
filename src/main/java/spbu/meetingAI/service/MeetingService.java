@@ -312,7 +312,7 @@ public class MeetingService {
             found = str.contains("\"done\": true,");
         }
         if (!found) {
-            producer.uploadFile(postMeetingTopic, groupId, meeting.getId().toString(), meeting.getDuration().getSeconds() * 64000);
+            //producer.uploadFile(postMeetingTopic, groupId, meeting.getId().toString(), meeting.getDuration().getSeconds() * 64000);
             return "";
         }
         return str;
