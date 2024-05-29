@@ -73,6 +73,7 @@ public class MeetingService {
             String transcript = getTranscript(operationId);
             logger.info("Setting transcript in meeting {}", meeting.getId());
             meeting.setTranscript(transcript);
+            meetingRepository.save(meeting);
         }
 
         logger.info("Creating summary for meeting {}", meeting.getId());
