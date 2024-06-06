@@ -75,12 +75,4 @@ public class MeetingController {
                 .thenApply(recordingService::getRecordingLink)
                 .thenApply(MeetingDto::fromModel);
     }
-
-    @DeleteMapping("/{meetingId}")
-    public void deleteMeetingById(
-            @PathVariable("meetingId") UUID meetingId
-    ) {
-        meetingService.deleteMeeting(meetingId);
-        recordingService.deleteRecording(meetingId);
-    }
 }
