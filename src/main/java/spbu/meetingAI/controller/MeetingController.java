@@ -17,7 +17,7 @@ import spbu.meetingAI.service.RecordingService;
 import spbu.meetingAI.util.OperationType;
 
 @RestController
-@CrossOrigin(origins = "https://84.201.175.36")
+@CrossOrigin("*")
 @RequestMapping("/api/meeting")
 public class MeetingController {
     private static final Logger logger
